@@ -1,4 +1,4 @@
-export { MICRO_PER_CREDIT, assertMicroInt, creditsToMicro, microToCredits, formatCredits } from "./money.js";
+export { MICRO_PER_CREDIT, assertMicroInt, creditsToMicro, microToCredits, formatCredits } from "./money";
 export {
   type LmsrState,
   createMarket,
@@ -10,8 +10,8 @@ export {
   sharesToMovePrice,
   sharesForBudgetMicro,
   worstCaseLossMicro,
-} from "./lmsr.js";
-export { type AccountId, type Balances, type Posting, emptyBalances, balanceOf, totalMicro, postEntry } from "./ledger.js";
+} from "./lmsr";
+export { type AccountId, type Balances, type Posting, emptyBalances, balanceOf, totalMicro, postEntry } from "./ledger";
 export {
   TREASURY,
   userAccount,
@@ -24,4 +24,4 @@ export {
   positionOf,
   executeTrade,
   resolveMarket,
-} from "./market.js";
+} from "./market";

@@ -1,4 +1,4 @@
-import { MICRO_PER_CREDIT, assertMicroInt } from "./money.js";
+import { MICRO_PER_CREDIT, assertMicroInt } from "./money";
 
 /**
  * Hanson's Logarithmic Market Scoring Rule.
@@ -50,11 +50,20 @@ export function cost(state: LmsrState): number {
   return state.b * logSumExp(exponents(state));
 }
 
-/** Instantaneous probabilities. Floats in (0,1) summing to ~1. Display only. */
+/**
+ * Instantaneous probabilities. Floats in (0, 1] summing to ~1. Display only.
+ * A price equals exactly 1 (or 0) only when the true value is beyond float64
+ * precision (exponent gap > ~36); UIs must clamp displayed probabilities so an
+ * open market never shows 100% (D17). Softmax normalization guarantees p <= 1.
+ */
 export function prices(state: LmsrState): number[] {
   const xs = exponents(state);
-  const lse = logSumExp(xs);
-  return xs.map((x) => Math.exp(x - lse));
+  let max = -Infinity;
+  for (const x of xs) if (x > max) max = x;
+  const es = xs.map((x) => Math.exp(x - max));
+  let sum = 0;
+  for (const e of es) sum += e;
+  return es.map((e) => e / sum);
 }
 
 /**

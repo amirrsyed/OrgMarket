@@ -128,6 +128,60 @@ Known risks: engagement decay after pilot novelty (mitigate: Slack-first design,
 stipend/faucet mechanics); incumbent response from Cultivate Labs (mitigate: AI-native
 cost structure, modern UX).
 
+### D13 — Quarterly seasons for balances; all-time calibration for status (2026-07-29)
+Balances reset each quarter (org-configurable length) with fresh grants; calibration
+scores accumulate forever. Incentive reasoning: perpetual balances concentrate wealth —
+early winners' trades dominate prices while newcomers face a rich-get-richer wall and
+disengage, which kills the aggregation the product exists for. Seasons re-level
+price-moving power every quarter (matching corporate planning cadence), so every
+employee always has a reason to trade. The durable status game is **accuracy**
+(all-time calibration), not wealth — wealth is within-season skin-in-the-game,
+calibration is cross-season reputation. Bonus: season-end recap reports are a natural
+renewal artifact for the sales motion. v0.1 runs one implicit season; the seasons table
+lands in v0.2.
+
+### D14 — Recognition-first incentives; no cash prizes tied to winnings (2026-07-29)
+Leaderboard status, badges/titles, and org-chosen recognition (e.g., lunch with the
+CEO, donation in the winner's name). No in-product cash or cash-equivalent prizes tied
+to market performance. Incentive reasoning: cash winnings (a) reopen the gambling-law
+perimeter play-money exists to avoid, (b) invite manipulation and collusion (trading to
+inflate a colleague's payout is profitable the moment payouts are fungible), and
+(c) crowd out the status motive that actually sustains long-run engagement. Peer status
+for *repeated accuracy* is manipulation-resistant — you cannot collude your way to a
+good all-time Brier score. Orgs may attach their own rewards outside the product; we
+recommend recognition over cash in onboarding materials.
+
+### D15 — Pseudonymity: blind by default, legible break-glass unmasking (2026-07-29)
+Admins cannot see who is behind a pseudonym in normal operation. Unmasking is a
+break-glass action: it requires a documented reason, is written to a tamper-evident
+audit log, and **notifies the affected user**; the org's unmasking policy is shown to
+every member at onboarding. Incentive reasoning: the chilling effect on honest trading
+operates on employees' *beliefs* about surveillance, not on actual access — so the
+guarantee must be legible and credible, not merely true. Pure no-exceptions blindness
+fails the other direction: it makes abuse (harassment in comments, coordinated
+manipulation) unpoliceable, which gives HR/legal a reason to veto the purchase.
+Observable-ex-post unmasking keeps covert retaliation non-credible (a manager cannot
+secretly learn who bet against them) while preserving an abuse remedy.
+
+### D16 — SSO deferred until a signed pilot requires it (2026-07-29)
+v0.1 auth is email magic link + Google OAuth behind an adapter interface; WorkOS
+SAML/SCIM is integrated when the first committed pilot demands it — a days-scale task
+if the abstraction is honest. Incentive reasoning: building SAML before revenue is
+speculative capex against the scarcest resource (founder build time), and the beachhead
+(150–2,000-person Slack-native studios) overwhelmingly runs Google/Microsoft OAuth.
+The exception that matters: never let SSO be the reason a signed pilot stalls — hence
+the adapter now, the vendor later.
+
+### D17 — Price contract is (0, 1], not (0, 1); UIs clamp displayed probabilities (2026-07-29)
+Found via a fast-check counterexample (b=5, one outcome ahead by ~166 shares): when the
+exponent gap exceeds ~36, the true price is closer to 1 than any float64 below 1, so a
+strict p<1 contract is mathematically unsatisfiable. `prices()` uses softmax
+normalization (guarantees p ≤ 1, never overshoots) and the contract is p ∈ (0, 1],
+hitting the endpoints only beyond float precision. Product rule: UIs clamp displayed
+probabilities (e.g. to 0.1%–99.9%) so an **open** market never shows 100% — which is
+the right epistemic message anyway: unresolved questions are never certain. Ledger math
+is unaffected (costs come from the cost function, not from prices).
+
 ---
 
 ## Developer syllabus (topics the builder must understand)

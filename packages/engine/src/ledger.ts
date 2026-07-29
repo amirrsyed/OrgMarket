@@ -1,4 +1,4 @@
-import { assertMicroInt } from "./money.js";
+import { assertMicroInt } from "./money";
 
 /**
  * Double-entry ledger over immutable balance maps.

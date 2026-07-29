@@ -10,7 +10,7 @@ import {
   sharesToMovePrice,
   tradeCostMicro,
   worstCaseLossMicro,
-} from "../src/lmsr.js";
+} from "../src/lmsr";
 
 const arbParams = fc.record({
   n: fc.integer({ min: 2, max: 8 }),
@@ -46,20 +46,30 @@ const arbSeededMarket = fc
   });
 
 describe("LMSR properties", () => {
-  it("prices are in (0,1) and sum to 1", () => {
+  it("prices are in (0,1] and sum to 1 (D17: exactly 1 only beyond float64 precision)", () => {
     fc.assert(
       fc.property(arbSeededMarket, ({ state }) => {
         const p = prices(state);
         let sum = 0;
         for (const pi of p) {
           expect(pi).toBeGreaterThan(0);
-          expect(pi).toBeLessThan(1);
+          expect(pi).toBeLessThanOrEqual(1);
           expect(Number.isFinite(pi)).toBe(true);
           sum += pi;
         }
         expect(Math.abs(sum - 1)).toBeLessThan(1e-9);
       }),
     );
+  });
+
+  it("prices stay strictly inside (0,1) while the exponent gap is representable", () => {
+    // Gap of 20: true losing price ≈ 2e-9, comfortably within float64.
+    let state = createMarket(2, 100);
+    state = applyTrade(state, 0, 2_000_000_000).state; // 2000 shares at b=100
+    const p = prices(state);
+    expect(p[0]!).toBeLessThan(1);
+    expect(p[0]!).toBeGreaterThan(0.999999);
+    expect(p[1]!).toBeGreaterThan(0);
   });
 
   it("every real buy costs at least 1 micro; every sale pays out (cost <= 0)", () => {

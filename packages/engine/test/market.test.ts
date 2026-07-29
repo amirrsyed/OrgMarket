@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { MICRO_PER_CREDIT, microToCredits } from "../src/money.js";
-import { prices, sharesForBudgetMicro, worstCaseLossMicro } from "../src/lmsr.js";
-import { balanceOf, emptyBalances, totalMicro, type Balances } from "../src/ledger.js";
+import { MICRO_PER_CREDIT, microToCredits } from "../src/money";
+import { prices, sharesForBudgetMicro, worstCaseLossMicro } from "../src/lmsr";
+import { balanceOf, emptyBalances, totalMicro, type Balances } from "../src/ledger";
 import {
   TREASURY,
   type MarketSession,
@@ -13,7 +13,7 @@ import {
   positionOf,
   resolveMarket,
   userAccount,
-} from "../src/market.js";
+} from "../src/market";
 
 const CREDITS = MICRO_PER_CREDIT;
 

@@ -1,6 +1,6 @@
-import { type LmsrState, applyTrade, createMarket } from "./lmsr.js";
-import { type AccountId, type Balances, type Posting, balanceOf, postEntry } from "./ledger.js";
-import { assertMicroInt } from "./money.js";
+import { type LmsrState, applyTrade, createMarket } from "./lmsr";
+import { type AccountId, type Balances, type Posting, balanceOf, postEntry } from "./ledger";
+import { assertMicroInt } from "./money";
 
 /**
  * Pure orchestration of one market: LMSR state + user positions + ledger moves.

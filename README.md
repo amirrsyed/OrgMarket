@@ -4,7 +4,9 @@ OrgMarket enables organizations to run internal prediction markets using managem
 
 ## Status
 
-Phase 1 of 5: the market engine exists as a pure, property-tested library. No app yet.
+Phase 2 of 5: pure property-tested market engine + a working web app (markets,
+forecast-slider trading, portfolio, calibration leaderboard, admin create/resolve)
+with a seeded demo org. Next: Slack app (phase 3), AI layer (phase 4).
 
 ## Repo map
 
@@ -12,6 +14,7 @@ Phase 1 of 5: the market engine exists as a pure, property-tested library. No ap
 - [`SPEC.md`](SPEC.md) — canonical product/engineering spec
 - [`CLAUDE.md`](CLAUDE.md) — working rules and invariants for AI-assisted development
 - [`packages/engine`](packages/engine) — Hanson LMSR market maker + double-entry ledger + market/position orchestration. Pure TypeScript, zero I/O, tested with Vitest + fast-check property tests.
+- [`apps/web`](apps/web) — Next.js app: Drizzle/Postgres persistence (embedded PGlite for zero-setup local dev, `DATABASE_URL` for real Postgres), transactional trading service with per-market locking + idempotency, forecast-slider UX, demo org ("Meridian Games") seeded on first run.
 
 ## Quickstart
 
@@ -19,6 +22,7 @@ Phase 1 of 5: the market engine exists as a pure, property-tested library. No ap
 npm install
 npm run typecheck
 npm test
+npm run dev -w @orgmarket/web   # http://localhost:3000 — pick a demo user to sign in
 ```
 
 ## License

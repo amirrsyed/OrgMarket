@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { type Posting, balanceOf, emptyBalances, postEntry, totalMicro } from "../src/ledger.js";
+import { type Posting, balanceOf, emptyBalances, postEntry, totalMicro } from "../src/ledger";
 
 const ACCOUNTS = ["a", "b", "c", "d"] as const;
 const ALLOW_ALL: ReadonlySet<string> = new Set(ACCOUNTS);

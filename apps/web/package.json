@@ -1,0 +1,33 @@
+{
+  "name": "@orgmarket/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.6",
+    "@orgmarket/engine": "*",
+    "drizzle-orm": "^0.44.4",
+    "next": "^15.4.5",
+    "postgres": "^3.4.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "recharts": "^3.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^24.1.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

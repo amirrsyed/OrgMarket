@@ -20,7 +20,9 @@ were made; this file records *what* to build. Update both when a decision change
 - Cost function `C(q) = b · ln(Σᵢ e^{qᵢ/b})` (credits; qᵢ in shares). Computed with
   log-sum-exp for stability.
 - Instantaneous price of outcome i: `pᵢ = e^{qᵢ/b} / Σⱼ e^{qⱼ/b}`. Prices are floats,
-  **display-only** — never stored in the ledger.
+  **display-only** — never stored in the ledger. Contract: pᵢ ∈ (0, 1], hitting an
+  endpoint only beyond float64 precision; UIs clamp displayed probabilities
+  (0.1%–99.9%) so an open market never shows 0% or 100% (D17).
 - Trade cost = `C(q_after) − C(q_before)`, converted to micro-credits and rounded
   **against the trader**: `ceil` overall, with a floor of +1 micro on any real buy and
   a cap of 0 on any sale (float noise must never pay a seller to buy or charge them to
@@ -48,6 +50,8 @@ were made; this file records *what* to build. Update both when a decision change
 - Grants (org-configurable, defaults): 1,000 ₥ on join; 250 ₥ weekly stipend. Stipends
   are the faucet that keeps busted forecasters playing; leaderboards rank
   **calibration**, not wealth, so the faucet doesn't corrupt the signal.
+- Seasons (D13): balances reset quarterly with fresh grants; calibration accumulates
+  all-time. v0.1 runs a single implicit season; `seasons` table ships in v0.2.
 
 ## 4. Engine package (`packages/engine`)
 
@@ -115,11 +119,10 @@ Real money. Order books. Shorting. Combinatorial/conditional markets (endgame, n
 now). Scalar markets (v1.x). Native mobile apps. Self-hosting. Teams bot (after
 Slack proves the loop). LS-LMSR (revisit if liquidity presets feel wrong in pilots).
 
-## 10. Open questions
+## 10. Resolved questions (see docs/CONTEXT.md D13–D16)
 
-- Balance resets (quarterly season vs. perpetual)? Leaning seasons + all-time
-  calibration score.
-- Prize mechanics that stay clearly outside gambling definitions in pilot orgs'
-  jurisdictions (recognition-first; legal review before cash-equivalent prizes).
-- Pseudonym visibility default for admins: fully blind vs. break-glass audit access.
-- When SSO becomes mandatory in the sales motion (likely first 500+ seat pilot).
+- Balances: quarterly seasons; calibration score is all-time (D13).
+- Prizes: recognition-first; no in-product cash tied to winnings (D14).
+- Pseudonyms: blind by default; break-glass unmasking with documented reason, audit
+  log, and user notification; policy shown to all members at onboarding (D15).
+- SSO: adapter now, WorkOS SAML/SCIM when the first committed pilot requires it (D16).
