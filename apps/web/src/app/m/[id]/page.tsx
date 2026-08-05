@@ -7,7 +7,8 @@ import { getMarket, priceHistory, recentTrades } from "@/services/trading";
 import { formatDate, formatMoney, formatPct, formatShares } from "@/lib/format";
 import { PriceChart } from "@/components/PriceChart";
 import { TradePanel } from "@/components/TradePanel";
-import { resolveMarketAction } from "@/app/actions";
+import { ResolveForm } from "@/components/ResolveForm";
+import { isAiConfigured } from "@/services/ai/client";
 
 export const dynamic = "force-dynamic";
 
@@ -141,34 +142,11 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           )}
 
           {member.role === "admin" && market.status !== "resolved" && (
-            <form
-              action={resolveMarketAction}
-              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm"
-            >
-              <p className="mb-2 font-medium text-amber-800">Resolve (admin)</p>
-              <input type="hidden" name="marketId" value={market.id} />
-              <div className="mb-2 space-y-1">
-                {market.outcomes.map((o) => (
-                  <label key={o.idx} className="flex items-center gap-2">
-                    <input type="radio" name="winningOutcomeIdx" value={o.idx} required />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-              <textarea
-                name="evidence"
-                required
-                placeholder="Evidence note (required)"
-                className="mb-2 w-full rounded border border-amber-200 p-2"
-                rows={2}
-              />
-              <button
-                type="submit"
-                className="rounded bg-amber-700 px-3 py-1.5 font-medium text-white"
-              >
-                Resolve market
-              </button>
-            </form>
+            <ResolveForm
+              marketId={market.id}
+              outcomes={market.outcomes.map((o) => ({ idx: o.idx, label: o.label }))}
+              aiConfigured={isAiConfigured()}
+            />
           )}
         </div>
       </div>

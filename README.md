@@ -4,11 +4,15 @@ OrgMarket enables organizations to run internal prediction markets using managem
 
 ## Status
 
-Phase 3 of 5: property-tested market engine, working web app (forecast-slider
-trading, portfolio, calibration leaderboard, admin flows, seeded demo org), and the
-Slack surface — announcements, one-tap in-channel forecasting (₥25-capped bucket
-taps), `/om` commands, digests. See [`docs/SLACK_SETUP.md`](docs/SLACK_SETUP.md) to
-connect a workspace. Next: AI layer (phase 4).
+Phase 4 of 5: property-tested market engine, working web app (forecast-slider
+trading, portfolio, calibration leaderboard, admin flows, seeded demo org), the
+Slack surface (announcements, ₥25-capped one-tap forecasting, `/om`, digests —
+[`docs/SLACK_SETUP.md`](docs/SLACK_SETUP.md)), and the AI layer: Claude drafts
+markets from pasted planning docs (`/admin/draft`, code-enforced guardrails,
+admin-in-the-loop), checks resolution evidence on the resolve form, and writes the
+weekly leadership memo (`/admin/memo`). Set `ANTHROPIC_API_KEY` to enable AI; see
+[`apps/web/.env.example`](apps/web/.env.example). Next: pilot hardening (phase 5 —
+real auth/SSO, audit log, SOC 2 groundwork).
 
 ## Repo map
 

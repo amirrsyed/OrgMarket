@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@electric-sql/pglite": "^0.3.6",
     "@orgmarket/engine": "*",
     "drizzle-orm": "^0.44.4",

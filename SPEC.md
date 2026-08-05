@@ -110,14 +110,20 @@ markets on earnings/guidance (MNPI hazard for public companies), individual-pers
 performance, M&A, layoffs. Void/N-A resolution (v0.2): traders refunded their net
 spend on the market; rounding residue sweeps to treasury.
 
-## 8. AI layer (phase 4)
+## 8. AI layer (phase 4, built — D19)
 
-- Question drafting: paste a roadmap/OKR doc → Claude drafts well-formed markets
-  (criteria, source, dates) → admin approves before publish. Structured output +
-  eval set of good/bad questions.
-- Resolution assistance: Claude gathers/summarizes evidence, admin confirms.
-- Weekly leadership memo: "what the market believes vs. the official plan," largest
-  belief-plan gaps first.
+- Question drafting: paste a roadmap/OKR doc at `/admin/draft` → Claude drafts
+  well-formed markets (question, criteria, source, close date, outcomes, liquidity
+  preset) via structured outputs → code-level guardrail filter (SPEC §7 blocked
+  categories) → admin reviews and one-click publishes (which announces to Slack).
+- Resolution assistance: on the resolve form, admin pastes evidence → Claude checks
+  it against the market's resolution criteria → suggests outcome + evidence note →
+  admin confirms. The AI never resolves.
+- Leadership memo at `/admin/memo`: deterministic data assembly in code (current
+  prices, 7-day deltas, biggest belief moves, closing-soon), Claude writes the prose;
+  optional post-to-Slack.
+- Config: `ANTHROPIC_API_KEY` (absent → AI surfaces show a "not configured" notice,
+  everything else works), `AI_MODEL` override (default `claude-opus-5`).
 
 ## 9. Non-goals for v1
 

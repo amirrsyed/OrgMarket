@@ -205,6 +205,31 @@ No passwords, no separate accounts, and it inherits SSO later (D16). Per-org
 dev. Bot tokens are stored plaintext in v0.1 — encrypt-at-rest is a pilot-hardening
 task, noted in SPEC.
 
+### D19 — AI layer: admin-in-the-loop always; guardrails in code, not just prompts (2026-08-05)
+The AI layer (the 10x wedge from the business plan) drafts markets from pasted
+planning docs, checks resolution evidence against the stated criteria, and writes the
+weekly "what the market believes" memo. Three design rules, all incentive-driven:
+
+1. **AI never publishes, trades, or resolves autonomously.** Every AI output passes
+   through an admin click. The product's entire value is *credibility of the signal* —
+   one hallucinated market or wrong auto-resolution costs more trust than automation
+   saves. Admin approval also keeps the resolution audit trail human-owned, which the
+   break-glass pseudonym policy (D15) depends on.
+2. **Guardrails are enforced in code after generation, not only requested in the
+   prompt.** SPEC §7's blocked categories (earnings/MNPI, individual performance,
+   M&A, layoffs) are compiled checks over the drafted questions; a prompt is advice,
+   a filter is a guarantee. Prompt-level instruction still exists to keep quality high,
+   but the filter is what we can promise a general counsel.
+3. **Graceful degradation.** Without an API key the AI surfaces disappear behind a
+   "not configured" notice; nothing else breaks. AI is leverage, not a dependency —
+   pilots must survive an Anthropic outage.
+
+Implementation: official TypeScript SDK, `claude-opus-5` (env-overridable via
+`AI_MODEL`), structured outputs via `client.messages.parse()` + Zod schemas so
+malformed drafts are impossible to publish. The memo assembles its numbers
+deterministically in code (prices, deltas, closing dates) and uses Claude only to
+write prose around them — the model never computes the figures it reports.
+
 ---
 
 ## Developer syllabus (topics the builder must understand)

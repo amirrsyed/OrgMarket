@@ -28,7 +28,11 @@ async function TopNav() {
           <Link href="/portfolio" className="hover:text-slate-900">Portfolio</Link>
           <Link href="/leaderboard" className="hover:text-slate-900">Leaderboard</Link>
           {member.role === "admin" && (
-            <Link href="/admin/new" className="hover:text-slate-900">New market</Link>
+            <>
+              <Link href="/admin/new" className="hover:text-slate-900">New market</Link>
+              <Link href="/admin/draft" className="hover:text-slate-900">Draft with AI</Link>
+              <Link href="/admin/memo" className="hover:text-slate-900">Memo</Link>
+            </>
           )}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
