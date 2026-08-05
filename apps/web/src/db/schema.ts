@@ -41,12 +41,23 @@ export const memberships = pgTable(
     userId: text("user_id").notNull().references(() => users.id),
     role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
     pseudonym: text("pseudonym").notNull(),
+    /** Cached Slack identity, resolved by workspace-verified email (D18). */
+    slackUserId: text("slack_user_id"),
   },
   (t) => [
     uniqueIndex("memberships_org_user").on(t.orgId, t.userId),
     uniqueIndex("memberships_org_pseudonym").on(t.orgId, t.pseudonym),
   ],
 );
+
+export const slackConnections = pgTable("slack_connections", {
+  orgId: text("org_id").primaryKey().references(() => orgs.id),
+  teamId: text("team_id").notNull().unique(),
+  /** Plaintext in v0.1; encrypt at rest before external pilots (SPEC §6). */
+  botToken: text("bot_token").notNull(),
+  channelId: text("channel_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const accounts = pgTable(
   "accounts",

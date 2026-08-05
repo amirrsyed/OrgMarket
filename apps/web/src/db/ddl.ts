@@ -95,4 +95,12 @@ export const DDL: readonly string[] = [
     micro_shares bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (market_id, membership_id, outcome_idx)
   )`,
+  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS slack_user_id text`,
+  `CREATE TABLE IF NOT EXISTS slack_connections (
+    org_id text PRIMARY KEY REFERENCES orgs(id),
+    team_id text NOT NULL UNIQUE,
+    bot_token text NOT NULL,
+    channel_id text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
 ];

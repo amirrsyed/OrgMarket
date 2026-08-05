@@ -9,6 +9,7 @@ import { getDb } from "@/db";
 import { memberships } from "@/db/schema";
 import { SESSION_COOKIE, currentMember } from "@/lib/session";
 import { createMarketTx, resolveMarketTx } from "@/services/trading";
+import { announceMarket, announceResolution } from "@/services/slack/notify";
 
 export async function loginAs(formData: FormData): Promise<void> {
   const membershipId = String(formData.get("membershipId") ?? "");
@@ -52,6 +53,7 @@ export async function createMarketAction(formData: FormData): Promise<void> {
     createdBy: member.membershipId,
     outcomeLabels: parsed.outcomes.split("\n"),
   });
+  await announceMarket(db, member.orgId, marketId);
   revalidatePath("/");
   redirect(`/m/${marketId}`);
 }
@@ -67,13 +69,14 @@ export async function resolveMarketAction(formData: FormData): Promise<void> {
   if (!member || member.role !== "admin") throw new Error("admin only");
   const parsed = resolveSchema.parse(Object.fromEntries(formData.entries()));
   const db = await getDb();
-  await resolveMarketTx(db, {
+  const { totalPayoutMicro, winnerCount } = await resolveMarketTx(db, {
     orgId: member.orgId,
     marketId: parsed.marketId,
     winningOutcomeIdx: parsed.winningOutcomeIdx,
     resolvedBy: member.membershipId,
     evidence: parsed.evidence,
   });
+  await announceResolution(db, member.orgId, parsed.marketId, totalPayoutMicro, winnerCount);
   revalidatePath(`/m/${parsed.marketId}`);
   revalidatePath("/");
   redirect(`/m/${parsed.marketId}`);

@@ -182,6 +182,29 @@ probabilities (e.g. to 0.1%–99.9%) so an **open** market never shows 100% — 
 the right epistemic message anyway: unresolved questions are never certain. Ledger math
 is unaffected (costs come from the cost function, not from prices).
 
+### D18 — Slack architecture: route handlers in the web app, bucket-button taps with a spend cap (2026-07-30)
+No Bolt framework and no separate service: Slack webhooks are Next.js route handlers
+in `apps/web` with manual HMAC signature verification and a thin fetch-based Web API
+client — serverless-friendly on Vercel, zero new runtime dependencies, and the trade
+path reuses the exact same transactional service the web UI uses.
+
+One-tap forecasting (binary markets): the announcement message carries five
+probability-bucket buttons (≈15% / ≈35% / toss-up / ≈65% / ≈85%). A tap trades
+*toward* that target, capped at ₥25 per tap. Incentive reasoning: uncapped
+trade-to-target would let one careless tap drain a balance (and makes fat-thumb
+manipulation cheap); a capped tap makes each press a small, honest, repeatable
+signal — conviction is expressed by tapping again over time, which is exactly the
+repeated-forecast behavior the market wants. Precise forecasts stay one click away
+via the "Open" link to the web slider; categorical markets announce prices and link
+to the web (bucket buttons don't map to n outcomes).
+
+Identity: Slack user → membership resolved by workspace-verified email
+(`users.info`) against `users.email`, then cached on `memberships.slack_user_id`.
+No passwords, no separate accounts, and it inherits SSO later (D16). Per-org
+`slack_connections` table (team id, bot token, channel); env-var fallback for local
+dev. Bot tokens are stored plaintext in v0.1 — encrypt-at-rest is a pilot-hardening
+task, noted in SPEC.
+
 ---
 
 ## Developer syllabus (topics the builder must understand)

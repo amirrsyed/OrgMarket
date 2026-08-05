@@ -4,9 +4,11 @@ OrgMarket enables organizations to run internal prediction markets using managem
 
 ## Status
 
-Phase 2 of 5: pure property-tested market engine + a working web app (markets,
-forecast-slider trading, portfolio, calibration leaderboard, admin create/resolve)
-with a seeded demo org. Next: Slack app (phase 3), AI layer (phase 4).
+Phase 3 of 5: property-tested market engine, working web app (forecast-slider
+trading, portfolio, calibration leaderboard, admin flows, seeded demo org), and the
+Slack surface — announcements, one-tap in-channel forecasting (₥25-capped bucket
+taps), `/om` commands, digests. See [`docs/SLACK_SETUP.md`](docs/SLACK_SETUP.md) to
+connect a workspace. Next: AI layer (phase 4).
 
 ## Repo map
 

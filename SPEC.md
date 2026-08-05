@@ -91,8 +91,14 @@ Web: org onboarding, member invites, market create (from templates) / browse / t
 via probability slider, portfolio, price-history chart, admin resolution flow with
 evidence note, calibration leaderboard, org settings (anonymity mode, grant sizes,
 liquidity preset). Seeded demo org for sales demos.
-Slack: market announcements to a channel, one-tap in-channel forecasting, weekly
-digest, resolution results.
+Slack (D18): market announcements to a channel, one-tap in-channel forecasting
+(probability-bucket buttons trading toward the target, capped at ₥25/tap; binary
+markets only — categorical announce + link), resolution notices, `/om list`,
+weekly digest (`POST /api/slack/digest`, secret-gated, wire to a cron). Identity by
+workspace-verified email → membership, cached in `memberships.slack_user_id`.
+Per-org `slack_connections` (team_id, bot_token, channel_id; plaintext token in
+v0.1 — encrypt at rest before pilots). Endpoints verify Slack HMAC signatures with
+a ±5-minute timestamp window.
 Auth: email magic link + Google OAuth. Pseudonym auto-assigned per org.
 
 ## 7. Question guardrails (ship with templates)

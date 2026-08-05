@@ -306,12 +306,20 @@ export interface TradePreview {
 /**
  * The forecast-slider primitive: "I think it's X%" → the trade that moves the
  * market there, clamped to what the member can afford (buys) or holds (sells).
+ * `maxSpendMicro` further caps a buy (Slack taps use ₥25 per D18).
  */
 export async function previewTrade(
   db: Db,
-  params: { orgId: string; marketId: string; membershipId: string; outcomeIdx: number; targetProb: number },
+  params: {
+    orgId: string;
+    marketId: string;
+    membershipId: string;
+    outcomeIdx: number;
+    targetProb: number;
+    maxSpendMicro?: number;
+  },
 ): Promise<TradePreview> {
-  const { orgId, marketId, membershipId, outcomeIdx, targetProb } = params;
+  const { orgId, marketId, membershipId, outcomeIdx, targetProb, maxSpendMicro } = params;
   const [market] = await db.select().from(markets).where(eq(markets.id, marketId));
   if (!market || market.orgId !== orgId) throw new Error("market not found");
   const outcomes = await db
@@ -364,8 +372,9 @@ export async function previewTrade(
       .from(accounts)
       .where(and(eq(accounts.orgId, orgId), eq(accounts.kind, "user"), eq(accounts.refId, membershipId)));
     const balance = acct?.balanceMicro ?? 0;
-    if (tradeCostMicro(state, tradeIdx, delta) > balance) {
-      delta = sharesForBudgetMicro(state, tradeIdx, balance);
+    const budget = maxSpendMicro !== undefined ? Math.min(balance, maxSpendMicro) : balance;
+    if (tradeCostMicro(state, tradeIdx, delta) > budget) {
+      delta = sharesForBudgetMicro(state, tradeIdx, budget);
       cappedBy = "budget";
     }
   }
@@ -379,7 +388,7 @@ export async function previewTrade(
 export async function resolveMarketTx(
   db: Db,
   params: { orgId: string; marketId: string; winningOutcomeIdx: number; resolvedBy: string; evidence: string; at?: Date },
-): Promise<{ totalPayoutMicro: number }> {
+): Promise<{ totalPayoutMicro: number; winnerCount: number }> {
   const { orgId, marketId, winningOutcomeIdx, resolvedBy, evidence } = params;
   const at = params.at ?? new Date();
   return db.transaction(async (tx) => {
@@ -396,12 +405,14 @@ export async function resolveMarketTx(
     const escrowAcct = await getOrCreateAccount(tx, orgId, "escrow", marketId);
 
     let totalPayout = 0;
+    let winnerCount = 0;
     const entryPostings: { accountId: string; amountMicro: number; isTreasury?: boolean }[] = [];
     for (const w of winners) {
       if (w.microShares <= 0) continue;
       const acct = await getOrCreateAccount(tx, orgId, "user", w.membershipId);
       entryPostings.push({ accountId: acct.id, amountMicro: w.microShares });
       totalPayout += w.microShares;
+      winnerCount += 1;
     }
     // INV-ESCROW: sweep escrow to exactly 0; treasury absorbs surplus/shortfall.
     if (escrowAcct.balanceMicro !== 0) {
@@ -424,7 +435,7 @@ export async function resolveMarketTx(
         resolutionEvidence: evidence,
       })
       .where(eq(markets.id, marketId));
-    return { totalPayoutMicro: totalPayout };
+    return { totalPayoutMicro: totalPayout, winnerCount };
   });
 }
 
