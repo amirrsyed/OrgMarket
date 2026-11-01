@@ -41,6 +41,7 @@ export function TradePanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [rationale, setRationale] = useState("");
   const requestSeq = useRef(0);
 
   const current = outcomes[sel]?.prob ?? 0.5;
@@ -82,6 +83,7 @@ export function TradePanel({
           outcomeIdx: preview.outcomeIdx,
           deltaMicroShares: preview.deltaMicroShares,
           idempotencyKey: crypto.randomUUID(),
+          ...(rationale.trim() ? { rationale: rationale.trim() } : {}),
         }),
       });
       const json = await res.json();
@@ -95,6 +97,7 @@ export function TradePanel({
             : `Sold ${formatShares(-preview.deltaMicroShares)} shares for ${formatMoney(-json.costMicro)}.`,
         );
         setPreview(null);
+        setRationale("");
         router.refresh();
       }
     } catch {
@@ -190,6 +193,18 @@ export function TradePanel({
           </p>
         )}
       </div>
+      {preview && preview.deltaMicroShares !== 0 && (
+        <div className="mt-2">
+          <textarea
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value.slice(0, 280))}
+            rows={2}
+            placeholder="Why? (optional, shown under your pseudonym)"
+            className="w-full rounded-lg border border-slate-200 p-2 text-sm focus:border-slate-400 focus:outline-none"
+          />
+          <p className="text-right text-xs text-slate-400">{rationale.length}/280</p>
+        </div>
+      )}
       <button
         type="button"
         onClick={submit}

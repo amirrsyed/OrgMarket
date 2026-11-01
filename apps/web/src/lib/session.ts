@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { memberships, orgs, users } from "@/db/schema";
+import { auth, isSsoConfigured } from "@/auth";
 
 export interface SessionMember {
   membershipId: string;
@@ -16,13 +17,26 @@ export interface SessionMember {
 export const SESSION_COOKIE = "om_member";
 
 /**
- * DEV AUTH ONLY (D16): the cookie holds a membership id chosen on the demo
- * login page. Replaced by Auth.js (magic link + Google OAuth) behind this same
- * interface before any external pilot.
+ * The demo picker login. On when DEV_LOGIN=1, or by default in development
+ * when no SSO provider is configured. Never on by accident in production.
  */
+export function isDevLoginEnabled(): boolean {
+  if (process.env.DEV_LOGIN === "1") return true;
+  if (process.env.DEV_LOGIN === "0") return false;
+  return !isSsoConfigured() && process.env.NODE_ENV !== "production";
+}
+
+/** Resolves the signed-in membership from the SSO session or the dev cookie. */
 export async function currentMember(): Promise<SessionMember | null> {
-  const store = await cookies();
-  const membershipId = store.get(SESSION_COOKIE)?.value;
+  let membershipId: string | undefined;
+  if (isSsoConfigured()) {
+    const session = (await auth()) as { membershipId?: string } | null;
+    membershipId = session?.membershipId;
+  }
+  if (!membershipId && isDevLoginEnabled()) {
+    const store = await cookies();
+    membershipId = store.get(SESSION_COOKIE)?.value;
+  }
   if (!membershipId) return null;
   const db = await getDb();
   const [row] = await db

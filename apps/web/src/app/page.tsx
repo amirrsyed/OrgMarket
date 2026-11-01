@@ -28,7 +28,9 @@ function MarketCard({ market }: { market: MarketRow }) {
           <p className="mt-1 text-xs text-slate-500">
             {resolved
               ? `Resolved: ${winner}`
-              : market.status === "closed"
+              : market.status === "resolving"
+                ? `Resolution pending: ${market.proposedOutcomeIdx !== null ? market.outcomes[market.proposedOutcomeIdx]?.label : "?"} (challenge window)`
+                : market.status === "closed"
                 ? "Closed — awaiting resolution"
                 : `Closes ${formatDate(market.closeAt)}`}
           </p>

@@ -230,6 +230,76 @@ malformed drafts are impossible to publish. The memo assembles its numbers
 deterministically in code (prices, deltas, closing dates) and uses Claude only to
 write prose around them — the model never computes the figures it reports.
 
+### D20 — Open-source stack review: what we adopted, rejected, and why (2026-11-01)
+The founder brought an external stack proposal for the open-source release. Each item
+was judged on incentives for (a) an enterprise IT team deciding whether to self-host
+and (b) employees deciding whether to trade honestly.
+
+**Adopted**
+- **SSO via Auth.js v5 (OIDC):** Google, Microsoft Entra ID, Okta, GitHub, and a
+  generic OIDC provider, each enabled by env vars. SAML is handled by putting an
+  OIDC bridge (BoxyHQ SAML Jackson) in front, so we never write SAML ourselves.
+  JWT sessions with no Auth.js adapter: Auth.js's `accounts` table name collides
+  with our ledger, and we only need identity, not token storage. Users are
+  auto-provisioned when their email domain is on the org's allow-list. The dev login
+  stays, but only behind `DEV_LOGIN=1`.
+- **Resolution challenge window (default 48h):** admins *propose* a resolution, any
+  member can dispute with a reason, and money only moves after the window closes with
+  no open disputes (or when an admin explicitly overrides one). This is the cheapest
+  credible answer to "who resolves the resolver", and it raises trust in the signal
+  more than it costs in latency.
+- **Anonymous "why" feed:** an optional rationale (280 characters max) on each trade,
+  shown under the trader's pseudonym. Prices say *what* the crowd believes and
+  rationales say *why*. For leadership the "why" is often the more valuable part,
+  so it also feeds the AI memo.
+- **Tamper-evident ledger (hash chain):** each journal entry stores
+  `sha256(prev_hash ‖ canonical entry)`, chained per org, and the chain head can be
+  published so anyone can verify that history was not rewritten. This is honest
+  about what it is: tamper-*evident*, not "cryptographically signed". A signing key
+  that sits on the same server as the database adds nothing against an operator.
+  Appends serialize per org on a `ledger_heads` row lock, which is fine at corporate
+  volume.
+- **Points-to-reward settlement, opt-in and guarded (amends D14):** the founder's
+  thesis is management-allocated money, so the open-source tool supports it without
+  ever touching money itself. At the end of a season the admin sets a **fixed reward
+  pool**. It is split pro rata on each member's *positive* season profit, with a
+  per-person cap (default 25% of the pool), and the output is a CSV export that the
+  org pays out through its own payroll or rewards system. Amounts above the cap
+  are **not** re-spread to other members; they stay with the org. The first
+  implementation did re-spread them ("water-filling"), and live testing showed the
+  failure: with four profitable traders and a 25% cap, everyone received an identical
+  payout, so reward stopped tracking accuracy. Incentive reasoning:
+  (1) a fixed pool bounds management's cost no matter what traders do;
+  (2) profit under LMSR is a proper-scoring reward, so the payout pays for accuracy;
+  (3) collusion is lossy, because value can only move between users through the AMM,
+  and the engine's property tests prove round trips never profit (the spread taxes
+  every wash trade); (4) the cap limits moral hazard for people who can influence
+  outcomes. Off by default, and the admin must acknowledge that a legal review
+  happened. Recognition-first (D14) remains the recommended default.
+- **Self-hosting:** a Dockerfile plus `docker compose` (app + Postgres 16). Enterprise
+  IT deploys open-source internal tools when those tools run inside its own VPC.
+- **Scheduled tick instead of a job queue:** one secret-gated `POST /api/cron/tick`
+  closes expired markets, finalizes resolutions whose challenge window has passed,
+  and pays idempotent weekly stipends. Any scheduler can call it (Vercel cron,
+  k8s CronJob, GitHub Actions).
+
+**Rejected (for now), with reasons**
+- **TigerBeetle:** it is excellent at millions of transfers per second, but a company
+  of 2,000 people produces a few thousand trades a day. It would also add a second
+  datastore that self-hosters must run and back up. Postgres with balanced journal
+  entries, row locks, and the hash chain already gives every guarantee we need.
+- **Redis/WebSockets for realtime:** prices move at human speed. A 15-second
+  auto-refresh delivers the same experience with one fewer stateful service to
+  self-host. Revisit if usage shows otherwise.
+- **Separate Fastify/NestJS/Go backend:** splitting it out buys no concurrency we
+  lack (trades already serialize per market in Postgres) and doubles the deploy
+  surface. It stays in Next.js route handlers.
+- **TimescaleDB:** the price history is one indexed `trades` table, orders of magnitude
+  below the size where a time-series extension pays off, and requiring an extension
+  would hurt managed-Postgres self-hosters.
+- **Helm chart, Microsoft Teams bot, per-season pseudonym rotation:** each is good,
+  but none is needed before the first pilot. They are queued, not rejected outright.
+
 ---
 
 ## Developer syllabus (topics the builder must understand)

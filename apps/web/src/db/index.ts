@@ -30,6 +30,10 @@ async function initDb(): Promise<Db> {
     const client = postgres(process.env.DATABASE_URL, { max: 10 });
     const db = drizzlePostgres(client, { schema }) as unknown as Db;
     await applyDdl(db);
+    if (process.env.SEED_DEMO === "1") {
+      const { seedIfEmpty } = await import("./seed");
+      await seedIfEmpty(db);
+    }
     return db;
   }
   const dataDir = process.env.PGLITE_DIR ?? ".data/pglite";

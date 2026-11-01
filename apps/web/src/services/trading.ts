@@ -11,13 +11,16 @@ import type { Db } from "@/db";
 import {
   accounts,
   journalEntries,
+  ledgerHeads,
   marketOutcomes,
   markets,
   memberships,
   positions,
   postings,
+  resolutionDisputes,
   trades,
 } from "@/db/schema";
+import { entryHash, genesisHash } from "@/services/ledger-chain";
 
 /**
  * Transactional service layer: every mutation runs in one DB transaction that
@@ -50,9 +53,11 @@ async function getOrCreateAccount(
 }
 
 /**
- * Post one balanced journal entry and apply it to denormalized balances.
- * Throws (rolling back the enclosing transaction) if postings don't sum to
- * zero or a non-treasury account would go negative.
+ * Post one balanced journal entry, chain it into the org's tamper-evident
+ * ledger (D20), and apply it to denormalized balances. Throws (rolling back
+ * the enclosing transaction) if postings don't sum to zero or a non-treasury
+ * account would go negative. Appends serialize per org on the ledger_heads
+ * row lock.
  */
 async function postJournal(
   tx: Tx,
@@ -61,6 +66,7 @@ async function postJournal(
   entryPostings: readonly { accountId: string; amountMicro: number; isTreasury?: boolean }[],
   meta?: Record<string, unknown>,
   at?: Date,
+  idempotencyKey?: string,
 ): Promise<void> {
   if (entryPostings.length < 2) throw new Error("journal entry needs at least two postings");
   let sum = 0;
@@ -71,10 +77,38 @@ async function postJournal(
     sum += p.amountMicro;
   }
   if (sum !== 0) throw new Error(`journal entry does not balance: sum ${sum}`);
-  const entryId = id();
+
   await tx
-    .insert(journalEntries)
-    .values({ id: entryId, orgId, kind, meta: meta ?? null, ...(at ? { createdAt: at } : {}) });
+    .insert(ledgerHeads)
+    .values({ orgId, seq: 0, headHash: genesisHash(orgId) })
+    .onConflictDoNothing({ target: ledgerHeads.orgId });
+  const [head] = await tx.select().from(ledgerHeads).where(eq(ledgerHeads.orgId, orgId)).for("update");
+  if (!head) throw new Error(`ledger head for ${orgId} missing`);
+
+  const entryId = id();
+  const createdAt = at ?? new Date();
+  const seq = head.seq + 1;
+  const hash = entryHash({
+    seq,
+    prevHash: head.headHash,
+    orgId,
+    entryId,
+    kind,
+    createdAtIso: createdAt.toISOString(),
+    postings: entryPostings,
+  });
+  await tx.insert(journalEntries).values({
+    id: entryId,
+    orgId,
+    kind,
+    meta: meta ?? null,
+    seq,
+    prevHash: head.headHash,
+    hash,
+    idempotencyKey: idempotencyKey ?? null,
+    createdAt,
+  });
+  await tx.update(ledgerHeads).set({ seq, headHash: hash }).where(eq(ledgerHeads.orgId, orgId));
   for (const p of entryPostings) {
     await tx.insert(postings).values({ id: id(), entryId, accountId: p.accountId, amountMicro: p.amountMicro });
     const [updated] = await tx
@@ -89,16 +123,26 @@ async function postJournal(
   }
 }
 
-/** Issue org-dollars to a member (join grant / stipend). */
+/**
+ * Issue org-dollars to a member (join grant / stipend). With an
+ * idempotencyKey, a repeat call is a no-op and returns false.
+ */
 export async function grantToMembership(
   db: Db,
-  params: { orgId: string; membershipId: string; amountMicro: number; at?: Date },
-): Promise<void> {
-  const { orgId, membershipId, amountMicro, at } = params;
+  params: { orgId: string; membershipId: string; amountMicro: number; at?: Date; idempotencyKey?: string },
+): Promise<boolean> {
+  const { orgId, membershipId, amountMicro, at, idempotencyKey } = params;
   if (!Number.isSafeInteger(amountMicro) || amountMicro <= 0) {
     throw new Error(`grant amount must be a positive integer, got ${amountMicro}`);
   }
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    if (idempotencyKey) {
+      const [existing] = await tx
+        .select({ id: journalEntries.id })
+        .from(journalEntries)
+        .where(eq(journalEntries.idempotencyKey, idempotencyKey));
+      if (existing) return false;
+    }
     const treasury = await getOrCreateAccount(tx, orgId, "treasury", orgId);
     const user = await getOrCreateAccount(tx, orgId, "user", membershipId);
     await postJournal(
@@ -111,7 +155,9 @@ export async function grantToMembership(
       ],
       { membershipId },
       at,
+      idempotencyKey,
     );
+    return true;
   });
 }
 
@@ -123,13 +169,18 @@ export interface MarketRow {
   resolutionCriteria: string;
   resolutionSource: string;
   liquidityB: number;
-  status: "open" | "closed" | "resolved";
+  status: "open" | "closed" | "resolving" | "resolved";
   closeAt: Date;
+  proposedOutcomeIdx: number | null;
+  proposedEvidence: string | null;
+  challengeEndsAt: Date | null;
   resolvedOutcomeIdx: number | null;
   resolutionEvidence: string | null;
   outcomes: { idx: number; label: string; qMicroShares: number }[];
   prices: number[];
 }
+
+export const RATIONALE_MAX_CHARS = 280;
 
 async function loadMarketLocked(tx: Tx, marketId: string) {
   const [market] = await tx.select().from(markets).where(eq(markets.id, marketId)).for("update");
@@ -200,6 +251,8 @@ export async function executeTradeTx(
     outcomeIdx: number;
     deltaMicroShares: number;
     idempotencyKey: string;
+    /** Optional anonymous "why" (D20), max RATIONALE_MAX_CHARS. */
+    rationale?: string;
     at?: Date;
   },
 ): Promise<TradeOutcome> {
@@ -207,6 +260,10 @@ export async function executeTradeTx(
   const at = params.at ?? new Date();
   if (!Number.isSafeInteger(deltaMicroShares) || deltaMicroShares === 0) {
     throw new Error(`deltaMicroShares must be a nonzero safe integer, got ${deltaMicroShares}`);
+  }
+  const rationale = params.rationale?.trim() || null;
+  if (rationale && rationale.length > RATIONALE_MAX_CHARS) {
+    throw new Error(`rationale must be at most ${RATIONALE_MAX_CHARS} characters`);
   }
   return db.transaction(async (tx) => {
     const { market, outcomes, state } = await loadMarketLocked(tx, marketId);
@@ -286,6 +343,7 @@ export async function executeTradeTx(
       deltaMicroShares,
       costMicro,
       postPrices,
+      rationale,
       idempotencyKey,
       createdAt: at,
     });
@@ -385,18 +443,21 @@ export async function previewTrade(
   return { outcomeIdx: tradeIdx, targetProb, deltaMicroShares: delta, costMicro, newProb, cappedBy };
 }
 
-export async function resolveMarketTx(
-  db: Db,
-  params: { orgId: string; marketId: string; winningOutcomeIdx: number; resolvedBy: string; evidence: string; at?: Date },
-): Promise<{ totalPayoutMicro: number; winnerCount: number }> {
-  const { orgId, marketId, winningOutcomeIdx, resolvedBy, evidence } = params;
-  const at = params.at ?? new Date();
-  return db.transaction(async (tx) => {
-    const { market, outcomes } = await loadMarketLocked(tx, marketId);
-    if (market.orgId !== orgId) throw new Error("market belongs to a different org");
-    if (market.status === "resolved") throw new Error("market is already resolved");
-    if (winningOutcomeIdx < 0 || winningOutcomeIdx >= outcomes.length) throw new Error("bad outcome index");
+export interface SettlementResult {
+  totalPayoutMicro: number;
+  winnerCount: number;
+}
 
+/**
+ * Pay winners and sweep escrow for a market whose row is already locked by
+ * the caller. Every path that moves money at resolution goes through here.
+ */
+async function settleLocked(
+  tx: Tx,
+  params: { orgId: string; marketId: string; winningOutcomeIdx: number; resolvedBy: string; evidence: string; at: Date },
+): Promise<SettlementResult> {
+  const { orgId, marketId, winningOutcomeIdx, resolvedBy, evidence, at } = params;
+  {
     const winners = await tx
       .select()
       .from(positions)
@@ -436,7 +497,194 @@ export async function resolveMarketTx(
       })
       .where(eq(markets.id, marketId));
     return { totalPayoutMicro: totalPayout, winnerCount };
+  }
+}
+
+/**
+ * Settle immediately, skipping the challenge window. Used by seeds, tests,
+ * and orgs that set challengeWindowHours to 0.
+ */
+export async function resolveMarketTx(
+  db: Db,
+  params: { orgId: string; marketId: string; winningOutcomeIdx: number; resolvedBy: string; evidence: string; at?: Date },
+): Promise<SettlementResult> {
+  const at = params.at ?? new Date();
+  return db.transaction(async (tx) => {
+    const { market, outcomes } = await loadMarketLocked(tx, params.marketId);
+    if (market.orgId !== params.orgId) throw new Error("market belongs to a different org");
+    if (market.status === "resolved") throw new Error("market is already resolved");
+    if (params.winningOutcomeIdx < 0 || params.winningOutcomeIdx >= outcomes.length) {
+      throw new Error("bad outcome index");
+    }
+    return settleLocked(tx, { ...params, at });
   });
+}
+
+export type ProposalResult =
+  | { finalized: false; challengeEndsAt: Date }
+  | ({ finalized: true } & SettlementResult);
+
+/**
+ * Admin proposes a resolution (D20). Trading stops; members may dispute until
+ * challengeEndsAt; money moves only at finalize. A window of 0 settles now.
+ * Re-proposing during the window revises the proposal and restarts the clock:
+ * open disputes are marked upheld if the outcome changed, dismissed otherwise.
+ */
+export async function proposeResolutionTx(
+  db: Db,
+  params: {
+    orgId: string;
+    marketId: string;
+    winningOutcomeIdx: number;
+    proposedBy: string;
+    evidence: string;
+    challengeWindowHours: number;
+    at?: Date;
+  },
+): Promise<ProposalResult> {
+  const at = params.at ?? new Date();
+  if (!(params.challengeWindowHours >= 0)) throw new Error("challenge window must be >= 0 hours");
+  return db.transaction(async (tx) => {
+    const { market, outcomes } = await loadMarketLocked(tx, params.marketId);
+    if (market.orgId !== params.orgId) throw new Error("market belongs to a different org");
+    if (market.status === "resolved") throw new Error("market is already resolved");
+    if (params.winningOutcomeIdx < 0 || params.winningOutcomeIdx >= outcomes.length) {
+      throw new Error("bad outcome index");
+    }
+    if (params.challengeWindowHours === 0) {
+      const settled = await settleLocked(tx, {
+        orgId: params.orgId,
+        marketId: params.marketId,
+        winningOutcomeIdx: params.winningOutcomeIdx,
+        resolvedBy: params.proposedBy,
+        evidence: params.evidence,
+        at,
+      });
+      return { finalized: true, ...settled };
+    }
+    if (market.status === "resolving") {
+      const changed = market.proposedOutcomeIdx !== params.winningOutcomeIdx;
+      await tx
+        .update(resolutionDisputes)
+        .set({ status: changed ? "upheld" : "dismissed" })
+        .where(and(eq(resolutionDisputes.marketId, params.marketId), eq(resolutionDisputes.status, "open")));
+    }
+    const challengeEndsAt = new Date(at.getTime() + params.challengeWindowHours * 3600 * 1000);
+    await tx
+      .update(markets)
+      .set({
+        status: "resolving",
+        proposedOutcomeIdx: params.winningOutcomeIdx,
+        proposedBy: params.proposedBy,
+        proposedEvidence: params.evidence,
+        challengeEndsAt,
+      })
+      .where(eq(markets.id, params.marketId));
+    return { finalized: false, challengeEndsAt };
+  });
+}
+
+/** Any member can dispute a proposed resolution while its window is open. */
+export async function disputeResolutionTx(
+  db: Db,
+  params: { orgId: string; marketId: string; membershipId: string; reason: string; at?: Date },
+): Promise<string> {
+  const at = params.at ?? new Date();
+  const reason = params.reason.trim();
+  if (reason.length < 10) throw new Error("explain the dispute in at least 10 characters");
+  if (reason.length > 1000) throw new Error("dispute reason must be at most 1000 characters");
+  return db.transaction(async (tx) => {
+    const { market } = await loadMarketLocked(tx, params.marketId);
+    if (market.orgId !== params.orgId) throw new Error("market belongs to a different org");
+    if (market.status !== "resolving" || !market.challengeEndsAt) {
+      throw new Error("there is no proposed resolution to dispute");
+    }
+    if (at.getTime() >= market.challengeEndsAt.getTime()) throw new Error("the challenge window has closed");
+    const [already] = await tx
+      .select({ id: resolutionDisputes.id })
+      .from(resolutionDisputes)
+      .where(
+        and(
+          eq(resolutionDisputes.marketId, params.marketId),
+          eq(resolutionDisputes.membershipId, params.membershipId),
+          eq(resolutionDisputes.status, "open"),
+        ),
+      );
+    if (already) throw new Error("you already have an open dispute on this market");
+    const disputeId = id();
+    await tx.insert(resolutionDisputes).values({
+      id: disputeId,
+      marketId: params.marketId,
+      membershipId: params.membershipId,
+      reason,
+      createdAt: at,
+    });
+    return disputeId;
+  });
+}
+
+/**
+ * Settle a proposed resolution. Requires the window to have closed with no
+ * open disputes, unless an admin explicitly overrides (which dismisses them).
+ */
+export async function finalizeResolutionTx(
+  db: Db,
+  params: { orgId: string; marketId: string; finalizedBy: string; overrideDisputes?: boolean; at?: Date },
+): Promise<SettlementResult> {
+  const at = params.at ?? new Date();
+  return db.transaction(async (tx) => {
+    const { market } = await loadMarketLocked(tx, params.marketId);
+    if (market.orgId !== params.orgId) throw new Error("market belongs to a different org");
+    if (market.status !== "resolving" || market.proposedOutcomeIdx === null || !market.challengeEndsAt) {
+      throw new Error("there is no proposed resolution to finalize");
+    }
+    const openDisputes = await tx
+      .select({ id: resolutionDisputes.id })
+      .from(resolutionDisputes)
+      .where(and(eq(resolutionDisputes.marketId, params.marketId), eq(resolutionDisputes.status, "open")));
+    if (!params.overrideDisputes) {
+      if (at.getTime() < market.challengeEndsAt.getTime()) throw new Error("the challenge window is still open");
+      if (openDisputes.length > 0) {
+        throw new Error(`${openDisputes.length} open dispute(s) must be reviewed before finalizing`);
+      }
+    } else if (openDisputes.length > 0) {
+      await tx
+        .update(resolutionDisputes)
+        .set({ status: "dismissed" })
+        .where(and(eq(resolutionDisputes.marketId, params.marketId), eq(resolutionDisputes.status, "open")));
+    }
+    return settleLocked(tx, {
+      orgId: params.orgId,
+      marketId: params.marketId,
+      winningOutcomeIdx: market.proposedOutcomeIdx,
+      resolvedBy: params.finalizedBy,
+      evidence: market.proposedEvidence ?? "",
+      at,
+    });
+  });
+}
+
+export interface DisputeRow {
+  id: string;
+  pseudonym: string;
+  reason: string;
+  status: "open" | "dismissed" | "upheld";
+  createdAt: Date;
+}
+
+export async function listDisputes(db: Db, marketId: string): Promise<DisputeRow[]> {
+  return db
+    .select({
+      id: resolutionDisputes.id,
+      pseudonym: memberships.pseudonym,
+      reason: resolutionDisputes.reason,
+      status: resolutionDisputes.status,
+      createdAt: resolutionDisputes.createdAt,
+    })
+    .from(resolutionDisputes)
+    .innerJoin(memberships, eq(resolutionDisputes.membershipId, memberships.id))
+    .where(eq(resolutionDisputes.marketId, marketId))
+    .orderBy(asc(resolutionDisputes.createdAt));
 }
 
 export async function listMarkets(db: Db, orgId: string): Promise<MarketRow[]> {
@@ -463,6 +711,9 @@ export async function listMarkets(db: Db, orgId: string): Promise<MarketRow[]> {
       liquidityB: m.liquidityB,
       status: m.status,
       closeAt: m.closeAt,
+      proposedOutcomeIdx: m.proposedOutcomeIdx,
+      proposedEvidence: m.proposedEvidence,
+      challengeEndsAt: m.challengeEndsAt,
       resolvedOutcomeIdx: m.resolvedOutcomeIdx,
       resolutionEvidence: m.resolutionEvidence,
       outcomes: outcomes.map((o) => ({ idx: o.idx, label: o.label, qMicroShares: o.qMicroShares })),
@@ -491,6 +742,7 @@ export interface RecentTrade {
   deltaMicroShares: number;
   costMicro: number;
   postProb: number;
+  rationale: string | null;
   createdAt: Date;
 }
 
@@ -502,6 +754,7 @@ export async function recentTrades(db: Db, marketId: string, limit = 20): Promis
       deltaMicroShares: trades.deltaMicroShares,
       costMicro: trades.costMicro,
       postPrices: trades.postPrices,
+      rationale: trades.rationale,
       createdAt: trades.createdAt,
     })
     .from(trades)
@@ -515,8 +768,46 @@ export async function recentTrades(db: Db, marketId: string, limit = 20): Promis
     deltaMicroShares: r.deltaMicroShares,
     costMicro: r.costMicro,
     postProb: r.postPrices[r.outcomeIdx] ?? 0,
+    rationale: r.rationale,
     createdAt: r.createdAt,
   }));
+}
+
+/** Recent non-empty rationales across an org's open markets — the "why" feed. */
+export async function recentRationales(
+  db: Db,
+  orgId: string,
+  since: Date,
+  limit = 30,
+): Promise<{ marketId: string; question: string; outcomeLabel: string; rationale: string; createdAt: Date }[]> {
+  const rows = await db
+    .select({
+      marketId: trades.marketId,
+      question: markets.question,
+      outcomeIdx: trades.outcomeIdx,
+      rationale: trades.rationale,
+      createdAt: trades.createdAt,
+    })
+    .from(trades)
+    .innerJoin(markets, eq(trades.marketId, markets.id))
+    .where(and(eq(trades.orgId, orgId), sql`${trades.rationale} is not null`, sql`${trades.createdAt} >= ${since}`))
+    .orderBy(desc(trades.createdAt))
+    .limit(limit);
+  const out = [];
+  for (const r of rows) {
+    const [outcome] = await db
+      .select({ label: marketOutcomes.label })
+      .from(marketOutcomes)
+      .where(and(eq(marketOutcomes.marketId, r.marketId), eq(marketOutcomes.idx, r.outcomeIdx)));
+    out.push({
+      marketId: r.marketId,
+      question: r.question,
+      outcomeLabel: outcome?.label ?? "?",
+      rationale: r.rationale ?? "",
+      createdAt: r.createdAt,
+    });
+  }
+  return out;
 }
 
 export interface PricePoint {

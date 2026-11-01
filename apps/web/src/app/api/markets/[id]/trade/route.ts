@@ -8,6 +8,7 @@ const bodySchema = z.object({
   outcomeIdx: z.number().int().min(0),
   deltaMicroShares: z.number().int(),
   idempotencyKey: z.string().min(8),
+  rationale: z.string().max(280).optional(),
 });
 
 export async function POST(
@@ -30,6 +31,7 @@ export async function POST(
       outcomeIdx: parsed.data.outcomeIdx,
       deltaMicroShares: parsed.data.deltaMicroShares,
       idempotencyKey: parsed.data.idempotencyKey,
+      ...(parsed.data.rationale ? { rationale: parsed.data.rationale } : {}),
     });
     return NextResponse.json(result);
   } catch (err) {

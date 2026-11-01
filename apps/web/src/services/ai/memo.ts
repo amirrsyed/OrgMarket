@@ -1,5 +1,11 @@
 import type { Db } from "@/db";
-import { listMarkets, priceHistory, type MarketRow, type PricePoint } from "@/services/trading";
+import {
+  listMarkets,
+  priceHistory,
+  recentRationales,
+  type MarketRow,
+  type PricePoint,
+} from "@/services/trading";
 import { clampProb, formatPct } from "@/lib/format";
 import { referencePrice } from "@/services/slack/blocks";
 import { AI_MODEL, getAnthropic } from "./client";
@@ -67,14 +73,21 @@ export async function generateLeadershipMemo(db: Db, orgId: string): Promise<str
   for (const market of markets) {
     histories.set(market.id, await priceHistory(db, market.id));
   }
-  const data = assembleMemoData(markets, histories, new Date());
+  const now = new Date();
+  const data = assembleMemoData(markets, histories, now);
+  const why = await recentRationales(db, orgId, new Date(now.getTime() - 7 * 24 * 3600 * 1000), 20);
+  const payload = {
+    ...data,
+    // Pseudonymous trader reasoning from the past week (D20) — quoted, never attributed.
+    traderReasoning: why.map((w) => ({ question: w.question, backed: w.outcomeLabel, why: w.rationale })),
+  };
   const client = getAnthropic();
   const response = await client.messages.create({
     model: AI_MODEL,
     max_tokens: 16000,
     system:
-      "You write the weekly one-page forecasting memo for a company's leadership team, based on their internal prediction markets. Use ONLY the probabilities, deltas, and dates provided — never invent or recompute a number. Plain professional prose in Markdown: a two-sentence headline of what the crowd believes, then '## Biggest moves this week' (skip markets with no meaningful change), '## Closing soon', and '## Recently resolved' if any. Where the crowd's probability suggests the official plan is in doubt, say so plainly — surfacing uncomfortable beliefs is the memo's job. Under 300 words.",
-    messages: [{ role: "user", content: JSON.stringify(data, null, 2) }],
+      "You write the weekly one-page forecasting memo for a company's leadership team, based on their internal prediction markets. Use ONLY the probabilities, deltas, and dates provided — never invent or recompute a number. Plain professional prose in Markdown: a two-sentence headline of what the crowd believes, then '## Biggest moves this week' (skip markets with no meaningful change), '## Closing soon', '## What traders are saying' (summarize the traderReasoning themes, quoting at most two short phrases, never naming anyone), and '## Recently resolved' if any. Where the crowd's probability suggests the official plan is in doubt, say so plainly — surfacing uncomfortable beliefs is the memo's job. Under 350 words.",
+    messages: [{ role: "user", content: JSON.stringify(payload, null, 2) }],
   });
   const text = response.content.find((b) => b.type === "text");
   if (!text || text.type !== "text") throw new Error("Claude returned no memo text");

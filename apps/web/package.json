@@ -16,6 +16,7 @@
     "@orgmarket/engine": "*",
     "drizzle-orm": "^0.44.4",
     "next": "^15.4.5",
+    "next-auth": "^5.0.0-beta.32",
     "postgres": "^3.4.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

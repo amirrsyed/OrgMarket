@@ -125,6 +125,34 @@ spend on the market; rounding residue sweeps to treasury.
 - Config: `ANTHROPIC_API_KEY` (absent → AI surfaces show a "not configured" notice,
   everything else works), `AI_MODEL` override (default `claude-opus-5`).
 
+## 8a. Open-source release additions (D20)
+
+- **Auth:** Auth.js v5, JWT sessions, providers enabled by env (Google, Entra ID,
+  Okta, GitHub, generic OIDC; SAML via an OIDC bridge). Sign-in auto-provisions a
+  membership when the email domain is in `orgs.settings.allowedDomains`, with a
+  random pseudonym and an idempotent join grant. The dev picker is available only
+  when `DEV_LOGIN=1`, or in development when no SSO is configured.
+- **Resolution lifecycle:** `open → (closed) → resolving → resolved`. An admin
+  *proposes* an outcome and evidence; `challengeEndsAt = now + challengeWindowHours`
+  (default 48, and 0 settles immediately). Members file disputes (≥10 characters, one
+  open dispute per member). Finalize requires the window to be closed with no open
+  disputes, unless an admin overrides, which dismisses the disputes and keeps them
+  visible on the market. Re-proposing restarts the window and marks open disputes
+  upheld (outcome changed) or dismissed (unchanged).
+- **Why feed:** `trades.rationale` (≤280 characters, optional), shown under
+  pseudonyms and summarized in the leadership memo.
+- **Ledger chain:** `journal_entries.{seq, prev_hash, hash}` plus `ledger_heads`;
+  `GET /api/ledger/verify`. The leaderboard footer shows integrity and the head hash.
+- **Tick:** `POST /api/cron/tick` (Bearer `CRON_SECRET`) closes expired markets,
+  finalizes undisputed resolutions, and pays weekly stipends (journal idempotency key
+  `stipend:{member}:{ISO week}`).
+- **Settlement:** `/admin/settlement` and `GET /api/admin/settlement` (CSV). A fixed
+  pool is split pro rata on positive season profit with a per-person cap; excess
+  above the cap stays with the org. The admin must acknowledge legal review. The
+  export contains email and payout only.
+- **Self-hosting:** Dockerfile (standalone Next.js, non-root) and docker-compose
+  (Postgres 16 + scheduler sidecar). `SEED_DEMO=1` seeds an empty Postgres.
+
 ## 9. Non-goals for v1
 
 Real money. Order books. Shorting. Combinatorial/conditional markets (endgame, not

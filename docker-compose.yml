@@ -1,0 +1,65 @@
+# OrgMarket self-hosted stack: app + Postgres 16 + a scheduler sidecar.
+#
+#   docker compose up --build        # demo: seeded org + demo sign-in at :3000
+#
+# For a real deployment, put secrets in a .env file next to this one and set
+# SEED_DEMO=0, DEV_LOGIN=0, and at least one SSO provider (see
+# apps/web/.env.example and docs/SELF_HOSTING.md).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orgmarket
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orgmarket}
+      POSTGRES_DB: orgmarket
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orgmarket"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://orgmarket:${POSTGRES_PASSWORD:-orgmarket}@db:5432/orgmarket
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_SECRET: ${AUTH_SECRET:-insecure-demo-secret-change-me}
+      AUTH_TRUST_HOST: "true"
+      CRON_SECRET: ${CRON_SECRET:-insecure-demo-cron-secret}
+      SEED_DEMO: ${SEED_DEMO:-1}
+      DEV_LOGIN: ${DEV_LOGIN:-1}
+      # Optional integrations — uncomment or set in .env:
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET, AUTH_MICROSOFT_ENTRA_ID_*, AUTH_OKTA_*, AUTH_OIDC_*
+      # SLACK_SIGNING_SECRET, DIGEST_SECRET, SLACK_BOT_TOKEN, SLACK_CHANNEL_ID
+    restart: unless-stopped
+
+  scheduler:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      - app
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-insecure-demo-cron-secret}
+    # Closes expired markets, finalizes undisputed resolutions, pays stipends.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 20
+        while true; do
+          curl -fsS -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/tick || true
+          echo
+          sleep 300
+        done
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -17,11 +17,29 @@ import {
  * amounts stay far below Number.MAX_SAFE_INTEGER at play-money scale.
  */
 
+export interface OrgSettings {
+  anonymity: "pseudonymous" | "open";
+  /** Email domains auto-provisioned on SSO sign-in (D20). */
+  allowedDomains?: string[];
+  /** Hours members may dispute a proposed resolution; 0 = settle immediately. */
+  challengeWindowHours?: number;
+  joinGrantCredits?: number;
+  weeklyStipendCredits?: number;
+}
+
+export const DEFAULT_ORG_SETTINGS: Required<OrgSettings> = {
+  anonymity: "pseudonymous",
+  allowedDomains: [],
+  challengeWindowHours: 48,
+  joinGrantCredits: 1000,
+  weeklyStipendCredits: 250,
+};
+
 export const orgs = pgTable("orgs", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   settings: jsonb("settings")
-    .$type<{ anonymity: "pseudonymous" | "open" }>()
+    .$type<OrgSettings>()
     .notNull()
     .default({ anonymity: "pseudonymous" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -50,6 +68,19 @@ export const memberships = pgTable(
   ],
 );
 
+export const resolutionDisputes = pgTable(
+  "resolution_disputes",
+  {
+    id: text("id").primaryKey(),
+    marketId: text("market_id").notNull().references(() => markets.id),
+    membershipId: text("membership_id").notNull().references(() => memberships.id),
+    reason: text("reason").notNull(),
+    status: text("status", { enum: ["open", "dismissed", "upheld"] }).notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("disputes_market").on(t.marketId)],
+);
+
 export const slackConnections = pgTable("slack_connections", {
   orgId: text("org_id").primaryKey().references(() => orgs.id),
   teamId: text("team_id").notNull().unique(),
@@ -72,12 +103,28 @@ export const accounts = pgTable(
   (t) => [uniqueIndex("accounts_org_kind_ref").on(t.orgId, t.kind, t.refId)],
 );
 
-export const journalEntries = pgTable("journal_entries", {
-  id: text("id").primaryKey(),
-  orgId: text("org_id").notNull().references(() => orgs.id),
-  kind: text("kind", { enum: ["grant", "trade", "resolution"] }).notNull(),
-  meta: jsonb("meta").$type<Record<string, unknown>>(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+export const journalEntries = pgTable(
+  "journal_entries",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id").notNull().references(() => orgs.id),
+    kind: text("kind", { enum: ["grant", "trade", "resolution"] }).notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    /** Per-org hash chain (D20): seq is gapless, hash = sha256(prevHash ‖ canonical entry). */
+    seq: bigint("seq", { mode: "number" }).notNull(),
+    prevHash: text("prev_hash").notNull(),
+    hash: text("hash").notNull(),
+    /** Makes scheduled grants (stipends) idempotent. */
+    idempotencyKey: text("idempotency_key").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("journal_org_seq").on(t.orgId, t.seq)],
+);
+
+export const ledgerHeads = pgTable("ledger_heads", {
+  orgId: text("org_id").primaryKey().references(() => orgs.id),
+  seq: bigint("seq", { mode: "number" }).notNull(),
+  headHash: text("head_hash").notNull(),
 });
 
 export const postings = pgTable(
@@ -99,9 +146,16 @@ export const markets = pgTable("markets", {
   resolutionCriteria: text("resolution_criteria").notNull(),
   resolutionSource: text("resolution_source").notNull(),
   liquidityB: doublePrecision("liquidity_b").notNull(),
-  status: text("status", { enum: ["open", "closed", "resolved"] }).notNull().default("open"),
+  status: text("status", { enum: ["open", "closed", "resolving", "resolved"] })
+    .notNull()
+    .default("open"),
   closeAt: timestamp("close_at", { withTimezone: true }).notNull(),
   createdBy: text("created_by").notNull().references(() => memberships.id),
+  /** Proposed resolution awaiting its challenge window (D20). */
+  proposedOutcomeIdx: integer("proposed_outcome_idx"),
+  proposedBy: text("proposed_by").references(() => memberships.id),
+  proposedEvidence: text("proposed_evidence"),
+  challengeEndsAt: timestamp("challenge_ends_at", { withTimezone: true }),
   resolvedOutcomeIdx: integer("resolved_outcome_idx"),
   resolvedBy: text("resolved_by").references(() => memberships.id),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -133,6 +187,8 @@ export const trades = pgTable(
     costMicro: bigint("cost_micro", { mode: "number" }).notNull(),
     /** Full post-trade price vector, for charts and calibration scoring. */
     postPrices: jsonb("post_prices").$type<number[]>().notNull(),
+    /** Optional anonymous "why", shown under the trader's pseudonym (D20). */
+    rationale: text("rationale"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

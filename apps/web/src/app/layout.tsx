@@ -32,6 +32,7 @@ async function TopNav() {
               <Link href="/admin/new" className="hover:text-slate-900">New market</Link>
               <Link href="/admin/draft" className="hover:text-slate-900">Draft with AI</Link>
               <Link href="/admin/memo" className="hover:text-slate-900">Memo</Link>
+              <Link href="/admin/settlement" className="hover:text-slate-900">Settlement</Link>
             </>
           )}
         </nav>

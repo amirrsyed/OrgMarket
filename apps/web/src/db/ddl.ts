@@ -1,8 +1,8 @@
 /**
  * Idempotent DDL mirroring schema.ts, applied at boot (CREATE TABLE IF NOT
- * EXISTS). Hand-written for now — the service tests exercise every table
- * through Drizzle, so schema drift fails the suite. Replace with drizzle-kit
- * migrations before the first externally-hosted deployment.
+ * EXISTS). Pre-1.0: schema changes are folded in here and dev databases are
+ * reset; the service tests exercise every table through Drizzle, so drift
+ * fails the suite. Switch to drizzle-kit migrations at 1.0.
  */
 export const DDL: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS orgs (
@@ -21,7 +21,8 @@ export const DDL: readonly string[] = [
     org_id text NOT NULL REFERENCES orgs(id),
     user_id text NOT NULL REFERENCES users(id),
     role text NOT NULL DEFAULT 'member',
-    pseudonym text NOT NULL
+    pseudonym text NOT NULL,
+    slack_user_id text
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS memberships_org_user ON memberships (org_id, user_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS memberships_org_pseudonym ON memberships (org_id, pseudonym)`,
@@ -38,7 +39,17 @@ export const DDL: readonly string[] = [
     org_id text NOT NULL REFERENCES orgs(id),
     kind text NOT NULL,
     meta jsonb,
+    seq bigint NOT NULL,
+    prev_hash text NOT NULL,
+    hash text NOT NULL,
+    idempotency_key text UNIQUE,
     created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS journal_org_seq ON journal_entries (org_id, seq)`,
+  `CREATE TABLE IF NOT EXISTS ledger_heads (
+    org_id text PRIMARY KEY REFERENCES orgs(id),
+    seq bigint NOT NULL,
+    head_hash text NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS postings (
     id text PRIMARY KEY,
@@ -59,6 +70,10 @@ export const DDL: readonly string[] = [
     status text NOT NULL DEFAULT 'open',
     close_at timestamptz NOT NULL,
     created_by text NOT NULL REFERENCES memberships(id),
+    proposed_outcome_idx integer,
+    proposed_by text REFERENCES memberships(id),
+    proposed_evidence text,
+    challenge_ends_at timestamptz,
     resolved_outcome_idx integer,
     resolved_by text REFERENCES memberships(id),
     resolved_at timestamptz,
@@ -82,6 +97,7 @@ export const DDL: readonly string[] = [
     delta_micro_shares bigint NOT NULL,
     cost_micro bigint NOT NULL,
     post_prices jsonb NOT NULL,
+    rationale text,
     idempotency_key text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   )`,
@@ -95,7 +111,15 @@ export const DDL: readonly string[] = [
     micro_shares bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (market_id, membership_id, outcome_idx)
   )`,
-  `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS slack_user_id text`,
+  `CREATE TABLE IF NOT EXISTS resolution_disputes (
+    id text PRIMARY KEY,
+    market_id text NOT NULL REFERENCES markets(id),
+    membership_id text NOT NULL REFERENCES memberships(id),
+    reason text NOT NULL,
+    status text NOT NULL DEFAULT 'open',
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS disputes_market ON resolution_disputes (market_id)`,
   `CREATE TABLE IF NOT EXISTS slack_connections (
     org_id text PRIMARY KEY REFERENCES orgs(id),
     team_id text NOT NULL UNIQUE,

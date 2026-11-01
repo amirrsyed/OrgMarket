@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { resolveMarketAction } from "@/app/actions";
+import { proposeResolutionAction } from "@/app/actions";
 
 interface Check {
   verdict: "criteria_met" | "criteria_not_met" | "insufficient_evidence";
@@ -56,8 +56,8 @@ export function ResolveForm({
   }
 
   return (
-    <form action={resolveMarketAction} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-      <p className="mb-2 font-medium text-amber-800">Resolve (admin)</p>
+    <form action={proposeResolutionAction} className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+      <p className="mb-2 font-medium text-amber-800">Propose resolution (admin)</p>
       <input type="hidden" name="marketId" value={marketId} />
       <div className="mb-2 space-y-1">
         {outcomes.map((o) => (
@@ -120,7 +120,7 @@ export function ResolveForm({
         </div>
       )}
       <button type="submit" className="rounded bg-amber-700 px-3 py-1.5 font-medium text-white">
-        Resolve market
+        Propose resolution
       </button>
     </form>
   );

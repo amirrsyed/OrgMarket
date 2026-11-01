@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { currentMember } from "@/lib/session";
 import { getLeaderboard } from "@/services/trading";
 import { formatMoney } from "@/lib/format";
+import { verifyLedgerChain } from "@/services/ledger-chain";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function LeaderboardPage() {
   if (!member) redirect("/login");
   const db = await getDb();
   const rows = await getLeaderboard(db, member.orgId);
+  const chain = await verifyLedgerChain(db, member.orgId);
   return (
     <div>
       <h1 className="mb-1 text-xl font-semibold">Leaderboard</h1>
@@ -56,6 +58,15 @@ export default async function LeaderboardPage() {
           </tbody>
         </table>
       </div>
+      <p className="mt-4 text-xs text-slate-400">
+        Ledger integrity:{" "}
+        {chain.ok ? (
+          <span className="text-emerald-700">verified</span>
+        ) : (
+          <span className="font-medium text-red-600">BROKEN at entry {chain.brokenAtSeq}</span>
+        )}{" "}
+        · {chain.entries} entries · head <code title={chain.headHash}>{chain.headHash.slice(0, 16)}…</code>
+      </p>
     </div>
   );
 }
