@@ -2,16 +2,16 @@
 
 **Internal prediction markets for organizations: a forecasting layer for planning.**
 
-Management allocates play-money credits to employees. Employees trade on the
+OrgMarket's mission is to enable organizations to run internal prediction markets using management-allocated dollars to promote perfect information between distant operations and better aid top-down decision making. OrgMarket forces the beautiful characteristics of markets (critical thinking, bet sizing, and local information) into a company’s assessments, solving Hayek's knowledge problem.
+
+Management allocates credits to employees. Employees trade on the
 questions leadership actually cares about, such as "Will the console build ship
 on the roadmap date?", "Will the playtest clear 70 NPS?", or "Which platform
-leads wishlists?". The resulting prices are the organization's honest,
+leads wishlists?". The resulting prices are the organization's accurate,
 continuously updated probability for each question, built from the local
 knowledge of the people closest to the work.
 
-The engineers know the date will slip before the status report turns red.
-OrgMarket gives them a pseudonymous, low-friction way to say so, and gives
-leadership the number.
+In an agentic organizations, which are rapidly approaching, prediction markets would create pricing incentives for particular agents with different capabilities to capitalize on. The propagation of price movements based on the relatedness of various event markets would perfectly adjust all the incentives across the company, increasing its allocative efficiency.
 
 Apache-2.0 · TypeScript · Next.js · Postgres · self-hostable with Docker
 
